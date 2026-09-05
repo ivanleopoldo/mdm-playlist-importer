@@ -20,8 +20,12 @@ import java.util.regex.Pattern;
 
 public final class YouTubePlaylistResolver {
     private static final int MAX_TRACKS = 64;
-    private static final Pattern VIDEO_ID_FALLBACK =
-        Pattern.compile("\\\"videoId\\\"\\s*:\\s*\\\"([A-Za-z0-9_-]{11})\\\"");
+
+    private static final Pattern PLAYLIST_RENDERER_VIDEO_ID = Pattern.compile(
+        "\\\"(?:playlistVideoRenderer|playlistPanelVideoRenderer)\\\"\\s*:\\s*\\{.*?"
+            + "\\\"videoId\\\"\\s*:\\s*\\\"([A-Za-z0-9_-]{11})\\\"",
+        Pattern.DOTALL
+    );
     private static final Pattern XML_VIDEO_ID =
         Pattern.compile("<yt:videoId>([A-Za-z0-9_-]{11})</yt:videoId>");
     private static final Pattern XML_TITLE =
@@ -34,51 +38,63 @@ public final class YouTubePlaylistResolver {
 
     private YouTubePlaylistResolver() {}
 
-    public static PlaylistResolver.Playlist resolve(String playlistId)
+    public static PlaylistResolver.Playlist resolve(String playlistId, String originalUrl)
         throws IOException, InterruptedException {
-        String pageUrl = "https://www.youtube.com/playlist?list=" + playlistId + "&hl=en";
-        String html = get(pageUrl, "Mozilla/5.0 (compatible; MDMPlaylistImporter/0.3)");
+
+        // Important for YouTube Mix/Radio URLs (RD..., RDEM..., start_radio=1):
+        // resolve the exact watch URL the user pasted. /playlist?list=... is not always
+        // a usable page for generated mixes.
+        String pageUrl = originalUrl;
+        String html = get(
+            pageUrl,
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                + "AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
+        );
 
         LinkedHashSet<String> ids = new LinkedHashSet<>();
-        String title = "YouTube Playlist";
+        String title = playlistId.startsWith("RD") ? "YouTube Mix" : "YouTube Playlist";
 
         try {
             JsonElement root = JsonParser.parseString(findInitialDataJson(html));
             collectVideoIds(root, ids);
             title = cleanTitle(findPlaylistTitle(root).orElse(title));
         } catch (Throwable ignored) {
-            // YouTube regularly changes ytInitialData wrappers. Continue with resilient
-            // fallbacks rather than reporting an empty playlist immediately.
+            // Continue with a renderer-specific raw-page fallback.
         }
 
         if (ids.isEmpty()) {
-            Matcher fallback = VIDEO_ID_FALLBACK.matcher(html);
+            Matcher fallback = PLAYLIST_RENDERER_VIDEO_ID.matcher(html);
             while (fallback.find() && ids.size() < MAX_TRACKS) {
                 ids.add(fallback.group(1));
             }
         }
 
-        // Public Atom feed is much simpler than the main YouTube page and works as a
-        // fallback when consent/experiments hide playlistVideoRenderer data.
+        // Static public playlists also expose an Atom feed. Generated YouTube
+        // Mix/Radio playlists often do not, so failure here is intentionally ignored.
         if (ids.isEmpty()) {
-            String feed = get(
-                "https://www.youtube.com/feeds/videos.xml?playlist_id=" + playlistId,
-                "Mozilla/5.0 (compatible; MDMPlaylistImporter/0.3)"
-            );
-            Matcher idMatcher = XML_VIDEO_ID.matcher(feed);
-            while (idMatcher.find() && ids.size() < MAX_TRACKS) {
-                ids.add(idMatcher.group(1));
-            }
-            if ("YouTube Playlist".equals(title)) {
-                Matcher titleMatcher = XML_TITLE.matcher(feed);
-                if (titleMatcher.find()) title = cleanTitle(unescapeXml(titleMatcher.group(1)));
+            try {
+                String feed = get(
+                    "https://www.youtube.com/feeds/videos.xml?playlist_id=" + playlistId,
+                    "Mozilla/5.0 (compatible; MDMPlaylistImporter/0.4)"
+                );
+                Matcher idMatcher = XML_VIDEO_ID.matcher(feed);
+                while (idMatcher.find() && ids.size() < MAX_TRACKS) {
+                    ids.add(idMatcher.group(1));
+                }
+                if ("YouTube Playlist".equals(title)) {
+                    Matcher titleMatcher = XML_TITLE.matcher(feed);
+                    if (titleMatcher.find()) {
+                        title = cleanTitle(unescapeXml(titleMatcher.group(1)));
+                    }
+                }
+            } catch (IOException ignored) {
+                // Expected for some generated mixes.
             }
         }
 
         if (ids.isEmpty()) {
             throw new IOException(
-                "Playlist was detected, but YouTube returned no track entries. "
-                    + "It may be private, age-restricted, or temporarily hidden behind a consent page."
+                "YouTube detected the playlist/mix URL, but did not expose its track queue."
             );
         }
 
@@ -190,6 +206,7 @@ public final class YouTubePlaylistResolver {
 
         if (element.isJsonObject()) {
             JsonObject object = element.getAsJsonObject();
+
             JsonElement metadata = object.get("playlistMetadataRenderer");
             if (metadata != null && metadata.isJsonObject()) {
                 JsonElement title = metadata.getAsJsonObject().get("title");
@@ -197,6 +214,14 @@ public final class YouTubePlaylistResolver {
                     return Optional.of(title.getAsString());
                 }
             }
+
+            JsonElement panel = object.get("playlistPanelRenderer");
+            if (panel != null && panel.isJsonObject()) {
+                JsonElement panelTitle = panel.getAsJsonObject().get("title");
+                Optional<String> text = textFromRuns(panelTitle);
+                if (text.isPresent()) return text;
+            }
+
             for (var entry : object.entrySet()) {
                 Optional<String> found = findPlaylistTitle(entry.getValue());
                 if (found.isPresent()) return found;
@@ -208,6 +233,28 @@ public final class YouTubePlaylistResolver {
             }
         }
 
+        return Optional.empty();
+    }
+
+    private static Optional<String> textFromRuns(JsonElement value) {
+        if (value == null || !value.isJsonObject()) return Optional.empty();
+        JsonObject obj = value.getAsJsonObject();
+
+        JsonElement simple = obj.get("simpleText");
+        if (simple != null && simple.isJsonPrimitive()) {
+            return Optional.of(simple.getAsString());
+        }
+
+        JsonElement runs = obj.get("runs");
+        if (runs != null && runs.isJsonArray()) {
+            StringBuilder out = new StringBuilder();
+            for (JsonElement run : runs.getAsJsonArray()) {
+                if (!run.isJsonObject()) continue;
+                JsonElement text = run.getAsJsonObject().get("text");
+                if (text != null && text.isJsonPrimitive()) out.append(text.getAsString());
+            }
+            if (!out.isEmpty()) return Optional.of(out.toString());
+        }
         return Optional.empty();
     }
 
