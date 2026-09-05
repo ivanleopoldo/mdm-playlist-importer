@@ -2,19 +2,21 @@
 
 NeoForge 1.21.1 addon for Music Disc Maker.
 
-## v0.3.0
+## v0.4.0
 
-Paste a supported playlist URL into the **normal Music Disc Maker URL field**. No extra button is required.
+The playlist controls are now visually part of the **Music Disc Maker GUI**.
 
-Supported automatic playlist imports:
+The Music Disc Maker window is widened with a connected, backed GUI panel containing an **Import Playlist** button. It is no longer a floating button outside the interface.
 
-- YouTube playlist pages
+### Supported playlist links
+
+- YouTube `/playlist?list=...`
+- YouTube watch / YouTube Music links containing `list=...`
+- YouTube generated Mix/Radio links such as `list=RD...` or `list=RDEM...`
 - Spotify playlists
 - Spotify albums
 - SoundCloud sets/playlists
 
-Normal single-track URLs continue to use Music Disc Maker's original behavior.
+Normal Music Disc Maker behavior is unchanged. Pasting a YouTube watch URL with a playlist still allows Music Disc Maker to treat it as one song unless the player explicitly presses **Import Playlist**.
 
-When Additional Additions is installed, imported tracks are automatically packed into empty Albums (8 tracks per album). Otherwise, the generated custom discs are delivered loose.
-
-The importer caps one import at 64 tracks and performs network/track resolution off the Minecraft server thread.
+When Additional Additions is installed, imported tracks are packed into empty Albums, 8 tracks per Album. Imports are capped at 64 tracks.
