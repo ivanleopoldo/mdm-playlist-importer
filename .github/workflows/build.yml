@@ -29,6 +29,16 @@ jobs:
           SSV_JAR=$(find build/ssvInspect -name '*.jar' | head -n 1)
           echo "SSV_JAR=$SSV_JAR"
           jar tf "$SSV_JAR" | grep -Ei 'sound|disc|playlist|storage|jukebox|etched|compat|relay' | head -n 400
+          echo "===== PlaylistHelper ====="
+          javap -classpath "$SSV_JAR" -p -c 'com.azulc.ongakumod.util.PlaylistHelper' || true
+          echo "===== DiscContainer ====="
+          javap -classpath "$SSV_JAR" -p -c 'com.azulc.ongakumod.container.DiscContainer' || true
+          echo "===== DiscRackBlockEntity ====="
+          javap -classpath "$SSV_JAR" -p -c 'com.azulc.ongakumod.blockentity.DiscRackBlockEntity' || true
+          echo "===== JukeboxHelper ====="
+          javap -classpath "$SSV_JAR" -p -c 'com.azulc.ongakumod.util.JukeboxHelper' || true
+          echo "===== EtchedBridge ====="
+          javap -classpath "$SSV_JAR" -p -c 'com.azulc.ongakumod.compat.EtchedBridge' || true
 
       - name: Build
         run: gradle build --stacktrace
