@@ -20,3 +20,10 @@ Supported links:
 Normal Music Disc Maker single-track behavior remains unchanged. Press **Import Playlist** only when you want the full playlist/mix.
 
 With Additional Additions installed, imported tracks are packed into empty Albums, 8 tracks per Album. Imports are capped at 64 tracks.
+
+
+## 0.4.2
+
+- Music Disc Maker Blank Discs now stack to 64 instead of 16.
+- The Music Disc Maker input slot can hold a full stack of Blank Discs.
+- No MDM menu/block-entity mixin is used; the addon only changes the Blank Disc's max stack component.
