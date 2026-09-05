@@ -147,7 +147,7 @@ public final class AudioEngine {
         if (tagStart < 0 || tagEnd < 0) return null;
         String tag = html.substring(tagStart, tagEnd + 1);
         java.util.regex.Matcher m = java.util.regex.Pattern
-            .compile("(?i)content\\s*=\\s*[\\"']([^\\"']*)[\\"']")
+            .compile("(?i)content\\s*=\\s*[\"']([^\"']*)[\"']")
             .matcher(tag);
         return m.find() ? m.group(1) : null;
     }
