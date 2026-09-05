@@ -21,7 +21,7 @@ import java.util.WeakHashMap;
 
 @EventBusSubscriber(modid = PlaylistImporterMod.MOD_ID, value = Dist.CLIENT)
 public final class ClientGuiHooks {
-    private static final int BASE_WIDTH = 200;
+    private static final int PANEL_WIDTH = 116;
     private static final Map<MusicDiscMakerScreen, Controls> CONTROLS =
         new WeakHashMap<>();
 
@@ -38,7 +38,8 @@ public final class ClientGuiHooks {
             .orElse(null);
         if (urlField == null) return;
 
-        int x = screen.getGuiLeft() + BASE_WIDTH + 7;
+        int panelX = panelX(screen);
+        int x = panelX + 7;
         int y = screen.getGuiTop() + 22;
 
         Button button = Button.builder(
@@ -57,7 +58,7 @@ public final class ClientGuiHooks {
     }
 
     @SubscribeEvent
-    public static void onScreenRender(ScreenEvent.Render.Post event) {
+    public static void onScreenBackground(ScreenEvent.Render.Background event) {
         if (!(event.getScreen() instanceof MusicDiscMakerScreen screen)) return;
         Controls controls = CONTROLS.get(screen);
         if (controls == null) return;
@@ -67,16 +68,24 @@ public final class ClientGuiHooks {
         controls.importButton().active = detected;
 
         GuiGraphics g = event.getGuiGraphics();
-        int x = screen.getGuiLeft() + BASE_WIDTH + 7;
+        int x = panelX(screen);
         int y = screen.getGuiTop();
+        int right = x + PANEL_WIDTH;
+        int bottom = y + screen.getYSize();
 
+        // Attached vanilla-style panel. It touches the Music Disc Maker window
+        // directly, so the playlist controls read as part of the same GUI.
+        g.fill(x, y, right, bottom, 0xFF373737);
+        g.fill(x + 1, y + 1, right - 1, bottom - 1, 0xFFFFFFFF);
+        g.fill(x + 2, y + 2, right - 2, bottom - 2, 0xFFC6C6C6);
+        g.fill(x + 2, y + 2, x + 3, bottom - 2, 0xFFFFFFFF);
+        g.fill(x + 3, bottom - 3, right - 2, bottom - 2, 0xFF555555);
+
+        int tx = x + 7;
         g.drawString(
             Minecraft.getInstance().font,
             Component.literal("Playlist Import"),
-            x,
-            y + 8,
-            0x404040,
-            false
+            tx, y + 8, 0x404040, false
         );
 
         g.drawString(
@@ -86,10 +95,7 @@ public final class ClientGuiHooks {
                     ? PlaylistUrlDetector.displayName(url)
                     : "Paste a playlist link"
             ),
-            x,
-            y + 49,
-            detected ? 0x2D6A2D : 0x666666,
-            false
+            tx, y + 49, detected ? 0x2D6A2D : 0x666666, false
         );
 
         g.drawString(
@@ -99,28 +105,27 @@ public final class ClientGuiHooks {
                     ? "Albums: ON (8 tracks)"
                     : "Albums: OFF"
             ),
-            x,
-            y + 64,
-            0x666666,
-            false
+            tx, y + 64, 0x666666, false
         );
 
         g.drawString(
             Minecraft.getInstance().font,
             Component.literal("YouTube / Spotify"),
-            x,
-            y + 92,
-            0x666666,
-            false
+            tx, y + 92, 0x666666, false
         );
         g.drawString(
             Minecraft.getInstance().font,
             Component.literal("SoundCloud"),
-            x,
-            y + 104,
-            0x666666,
-            false
+            tx, y + 104, 0x666666, false
         );
+    }
+
+    private static int panelX(MusicDiscMakerScreen screen) {
+        int right = screen.getGuiLeft() + screen.getXSize() - 1;
+        if (right + PANEL_WIDTH <= screen.width - 4) {
+            return right;
+        }
+        return screen.getGuiLeft() - PANEL_WIDTH + 1;
     }
 
     private record Controls(EditBox urlField, Button importButton) {}
