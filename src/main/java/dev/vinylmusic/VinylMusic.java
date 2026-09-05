@@ -1,10 +1,8 @@
 package dev.vinylmusic;
 
-import dev.vinylmusic.audio.AudioEngine;
 import dev.vinylmusic.content.ModContent;
 import dev.vinylmusic.config.VinylMusicConfig;
 import dev.vinylmusic.network.ModNetwork;
-import dev.vinylmusic.playlist.PlaylistImportService;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -14,8 +12,8 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.IEventBus;
-import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
@@ -30,7 +28,9 @@ public final class VinylMusic {
         ModContent.register(modBus);
         modBus.addListener(ModNetwork::register);
         NeoForge.EVENT_BUS.addListener(this::onRightClickBlock);
-        AudioEngine.bootstrap();
+
+        // Deliberately do not start the streaming backend here.
+        // The isolated audio stack is loaded only when a track is resolved or played.
     }
 
     private void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
@@ -65,7 +65,12 @@ public final class VinylMusic {
             if (!tracks.isEmpty()) {
                 PacketDistributor.sendToPlayersNear(
                     level, null, pos.getX() + .5, pos.getY() + .5, pos.getZ() + .5, 128,
-                    new dev.vinylmusic.network.StartPlaybackPayload(pos, tracks, VinylMusicConfig.playerRange(), VinylMusicConfig.playerVolume())
+                    new dev.vinylmusic.network.StartPlaybackPayload(
+                        pos,
+                        tracks,
+                        VinylMusicConfig.playerRange(),
+                        VinylMusicConfig.playerVolume()
+                    )
                 );
                 player.displayClientMessage(
                     Component.literal(tracks.size() == 1

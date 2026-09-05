@@ -5,6 +5,7 @@ import dev.vinylmusic.content.ModContent;
 import net.minecraft.client.resources.sounds.AbstractTickableSoundInstance;
 import net.minecraft.client.resources.sounds.Sound;
 import net.minecraft.client.sounds.AudioStream;
+import net.minecraft.client.sounds.SoundBufferLibrary;
 import net.minecraft.client.sounds.SoundManager;
 import net.minecraft.client.sounds.WeighedSoundEvents;
 import net.minecraft.core.BlockPos;
@@ -20,7 +21,13 @@ public final class VinylSoundInstance extends AbstractTickableSoundInstance {
     private final Runnable onEnded;
     private final AtomicBoolean closed = new AtomicBoolean();
 
-    public VinylSoundInstance(BlockPos pos, PcmSource source, int range, int volumePercent, Runnable onEnded) {
+    public VinylSoundInstance(
+        BlockPos pos,
+        PcmSource source,
+        int range,
+        int volumePercent,
+        Runnable onEnded
+    ) {
         super(ModContent.STREAM_SOUND.get(), SoundSource.RECORDS, RandomSource.create());
         this.source = source;
         this.range = Math.max(16, Math.min(range, 256));
@@ -35,11 +42,14 @@ public final class VinylSoundInstance extends AbstractTickableSoundInstance {
         this.attenuation = Attenuation.LINEAR;
     }
 
-    @Override public void tick() {}
+    @Override
+    public void tick() {
+    }
 
     @Override
     public WeighedSoundEvents resolve(SoundManager manager) {
         WeighedSoundEvents result = super.resolve(manager);
+
         if (this.sound != null && this.sound != SoundManager.EMPTY_SOUND) {
             this.sound = new Sound(
                 this.sound.getLocation(),
@@ -52,15 +62,23 @@ public final class VinylSoundInstance extends AbstractTickableSoundInstance {
                 range
             );
         }
+
         return result;
     }
 
-    public CompletableFuture<AudioStream> customStream() {
+    @Override
+    public CompletableFuture<AudioStream> getStream(
+        SoundBufferLibrary soundBuffers,
+        Sound sound,
+        boolean looping
+    ) {
         return CompletableFuture.completedFuture(new PcmAudioStream(source, onEnded));
     }
 
     public void requestStop() {
         stop();
-        if (closed.compareAndSet(false, true)) source.close();
+        if (closed.compareAndSet(false, true)) {
+            source.close();
+        }
     }
 }

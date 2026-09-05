@@ -22,14 +22,36 @@ repositories {
     mavenCentral()
 }
 
+configurations {
+    audioLibraries
+    audioLibraries.exclude group: 'commons-logging', module: 'commons-logging'
+}
+
+sourceSets {
+    audioImpl {
+        java.srcDir 'src/audioImpl/java'
+        resources.srcDir 'src/audioImpl/resources'
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+
+configurations.audioImplImplementation.extendsFrom(configurations.audioLibraries)
+
 neoForge {
     version = project.neo_version
 
     runs {
-        client { client() }
+        client {
+            client()
+            systemProperty 'vinylmusic.devAudioDir',
+                layout.buildDirectory.dir('vinylAudio').get().asFile.absolutePath
+        }
         server {
             server()
             programArgument '--nogui'
+            systemProperty 'vinylmusic.devAudioDir',
+                layout.buildDirectory.dir('vinylAudio').get().asFile.absolutePath
         }
     }
 
@@ -41,24 +63,47 @@ neoForge {
 }
 
 dependencies {
-    def lava = implementation('net.hycrafthd.lavaplayer:lavaplayer:2.2.4-fix-j8')
-    jarJar(lava) {
-        version {
-            strictly '[2.2.4-fix-j8]'
-            prefer '2.2.4-fix-j8'
-        }
-    }
+    // Keep the streaming stack out of NeoForge's normal module/classloader.
+    // These jars are packed as opaque .jar.packed files and loaded only by
+    // Vinyl Music's isolated audio classloader when a song is actually used.
+    audioLibraries 'net.hycrafthd.lavaplayer:lavaplayer:2.2.4-fix-j8'
+    audioLibraries 'dev.lavalink.youtube:v2:c46ab888ee12bc4bcb37c8ebcaf180e85ae30368-SNAPSHOT'
+    audioLibraries 'org.slf4j:jcl-over-slf4j:2.0.17'
+}
 
-    def yt = implementation('dev.lavalink.youtube:v2:c46ab888ee12bc4bcb37c8ebcaf180e85ae30368-SNAPSHOT')
-    jarJar(yt) {
-        version {
-            strictly '[c46ab888ee12bc4bcb37c8ebcaf180e85ae30368-SNAPSHOT]'
-            prefer 'c46ab888ee12bc4bcb37c8ebcaf180e85ae30368-SNAPSHOT'
-        }
-    }
+tasks.named('compileAudioImplJava').configure {
+    dependsOn tasks.named('classes')
+    options.encoding = 'UTF-8'
+}
 
-    additionalRuntimeClasspath 'net.hycrafthd.lavaplayer:lavaplayer:2.2.4-fix-j8'
-    additionalRuntimeClasspath 'dev.lavalink.youtube:v2:c46ab888ee12bc4bcb37c8ebcaf180e85ae30368-SNAPSHOT'
+def audioImplJar = tasks.register('audioImplJar', Jar) {
+    dependsOn tasks.named('compileAudioImplJava')
+    from sourceSets.audioImpl.output
+    archiveFileName = 'vinyl-music-audio.jar.packed'
+    destinationDirectory = layout.buildDirectory.dir('vinylAudio')
+}
+
+def copyAudioDependencies = tasks.register('copyAudioDependencies', Sync) {
+    from configurations.audioLibraries.copyRecursive().with {
+        exclude group: 'org.slf4j', module: 'slf4j-api'
+    }
+    into layout.buildDirectory.dir('vinylAudio/dependencies')
+    rename { fileName -> fileName + '.packed' }
+}
+
+tasks.named('jar').configure {
+    dependsOn audioImplJar
+    dependsOn copyAudioDependencies
+
+    into('vinyl-audio') {
+        from(audioImplJar.flatMap { it.archiveFile })
+        from(layout.buildDirectory.dir('vinylAudio/dependencies'))
+    }
+}
+
+tasks.matching { it.name in ['runClient', 'runServer'] }.configureEach {
+    dependsOn audioImplJar
+    dependsOn copyAudioDependencies
 }
 
 var generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
@@ -85,7 +130,6 @@ neoForge.ideSyncTask generateModMetadata
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
-
 
 configurations.configureEach {
     resolutionStrategy.force 'org.apache.httpcomponents:httpclient:4.5.13'
