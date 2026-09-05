@@ -19,9 +19,13 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class YouTubePlaylistResolver {
-    private static final Pattern LIST_ID =
-        Pattern.compile("(?:[?&])list=([A-Za-z0-9_-]{10,100})");
     private static final int MAX_TRACKS = 64;
+    private static final Pattern VIDEO_ID_FALLBACK =
+        Pattern.compile("\\\"videoId\\\"\\s*:\\s*\\\"([A-Za-z0-9_-]{11})\\\"");
+    private static final Pattern XML_VIDEO_ID =
+        Pattern.compile("<yt:videoId>([A-Za-z0-9_-]{11})</yt:videoId>");
+    private static final Pattern XML_TITLE =
+        Pattern.compile("<title>(.*?)</title>", Pattern.DOTALL);
 
     private static final HttpClient HTTP = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(10))
@@ -30,16 +34,68 @@ public final class YouTubePlaylistResolver {
 
     private YouTubePlaylistResolver() {}
 
-    public record Playlist(String title, List<String> videoIds) {}
+    public static PlaylistResolver.Playlist resolve(String playlistId)
+        throws IOException, InterruptedException {
+        String pageUrl = "https://www.youtube.com/playlist?list=" + playlistId + "&hl=en";
+        String html = get(pageUrl, "Mozilla/5.0 (compatible; MDMPlaylistImporter/0.3)");
 
-    public static Playlist resolve(String suppliedUrl) throws IOException, InterruptedException {
-        String playlistId = extractPlaylistId(suppliedUrl)
-            .orElseThrow(() -> new IllegalArgumentException("That is not a YouTube playlist URL."));
+        LinkedHashSet<String> ids = new LinkedHashSet<>();
+        String title = "YouTube Playlist";
 
-        URI uri = URI.create("https://www.youtube.com/playlist?list=" + playlistId + "&hl=en");
-        HttpRequest request = HttpRequest.newBuilder(uri)
+        try {
+            JsonElement root = JsonParser.parseString(findInitialDataJson(html));
+            collectVideoIds(root, ids);
+            title = cleanTitle(findPlaylistTitle(root).orElse(title));
+        } catch (Throwable ignored) {
+            // YouTube regularly changes ytInitialData wrappers. Continue with resilient
+            // fallbacks rather than reporting an empty playlist immediately.
+        }
+
+        if (ids.isEmpty()) {
+            Matcher fallback = VIDEO_ID_FALLBACK.matcher(html);
+            while (fallback.find() && ids.size() < MAX_TRACKS) {
+                ids.add(fallback.group(1));
+            }
+        }
+
+        // Public Atom feed is much simpler than the main YouTube page and works as a
+        // fallback when consent/experiments hide playlistVideoRenderer data.
+        if (ids.isEmpty()) {
+            String feed = get(
+                "https://www.youtube.com/feeds/videos.xml?playlist_id=" + playlistId,
+                "Mozilla/5.0 (compatible; MDMPlaylistImporter/0.3)"
+            );
+            Matcher idMatcher = XML_VIDEO_ID.matcher(feed);
+            while (idMatcher.find() && ids.size() < MAX_TRACKS) {
+                ids.add(idMatcher.group(1));
+            }
+            if ("YouTube Playlist".equals(title)) {
+                Matcher titleMatcher = XML_TITLE.matcher(feed);
+                if (titleMatcher.find()) title = cleanTitle(unescapeXml(titleMatcher.group(1)));
+            }
+        }
+
+        if (ids.isEmpty()) {
+            throw new IOException(
+                "Playlist was detected, but YouTube returned no track entries. "
+                    + "It may be private, age-restricted, or temporarily hidden behind a consent page."
+            );
+        }
+
+        List<String> urls = new ArrayList<>(Math.min(ids.size(), MAX_TRACKS));
+        for (String id : ids) {
+            if (urls.size() >= MAX_TRACKS) break;
+            urls.add("https://www.youtube.com/watch?v=" + id);
+        }
+
+        return new PlaylistResolver.Playlist(title, List.copyOf(urls));
+    }
+
+    private static String get(String url, String userAgent)
+        throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder(URI.create(url))
             .timeout(Duration.ofSeconds(20))
-            .header("User-Agent", "Mozilla/5.0 (compatible; MDMPlaylistImporter/0.2)")
+            .header("User-Agent", userAgent)
             .header("Accept-Language", "en-US,en;q=0.9")
             .GET()
             .build();
@@ -48,30 +104,7 @@ public final class YouTubePlaylistResolver {
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             throw new IOException("YouTube returned HTTP " + response.statusCode());
         }
-
-        JsonElement root = JsonParser.parseString(findInitialDataJson(response.body()));
-        LinkedHashSet<String> ids = new LinkedHashSet<>();
-        collectVideoIds(root, ids);
-        if (ids.isEmpty()) {
-            throw new IOException("No playlist tracks were found. The playlist may be private or unavailable.");
-        }
-
-        List<String> limited = new ArrayList<>(Math.min(ids.size(), MAX_TRACKS));
-        for (String id : ids) {
-            if (limited.size() >= MAX_TRACKS) break;
-            limited.add(id);
-        }
-
-        return new Playlist(
-            cleanTitle(findPlaylistTitle(root).orElse("YouTube Playlist")),
-            List.copyOf(limited)
-        );
-    }
-
-    public static Optional<String> extractPlaylistId(String url) {
-        if (url == null) return Optional.empty();
-        Matcher matcher = LIST_ID.matcher(url);
-        return matcher.find() ? Optional.of(matcher.group(1)) : Optional.empty();
+        return response.body();
     }
 
     private static String findInitialDataJson(String html) throws IOException {
@@ -90,18 +123,7 @@ public final class YouTubePlaylistResolver {
                 if (json != null) return json;
             }
         }
-
-        int key = html.indexOf("ytInitialData");
-        while (key >= 0) {
-            int start = html.indexOf('{', key);
-            if (start >= 0) {
-                String json = extractBalancedObject(html, start);
-                if (json != null && json.contains("playlistVideoRenderer")) return json;
-            }
-            key = html.indexOf("ytInitialData", key + 1);
-        }
-
-        throw new IOException("Could not read YouTube playlist metadata.");
+        throw new IOException("ytInitialData was not present.");
     }
 
     private static String extractBalancedObject(String text, int start) {
@@ -130,7 +152,7 @@ public final class YouTubePlaylistResolver {
     }
 
     private static void collectVideoIds(JsonElement element, LinkedHashSet<String> ids) {
-        if (element == null || element.isJsonNull()) return;
+        if (element == null || element.isJsonNull() || ids.size() >= MAX_TRACKS) return;
 
         if (element.isJsonArray()) {
             JsonArray array = element.getAsJsonArray();
@@ -159,7 +181,7 @@ public final class YouTubePlaylistResolver {
         JsonElement id = renderer.getAsJsonObject().get("videoId");
         if (id != null && id.isJsonPrimitive()) {
             String value = id.getAsString();
-            if (value.matches("[A-Za-z0-9_-]{6,20}")) ids.add(value);
+            if (value.matches("[A-Za-z0-9_-]{11}")) ids.add(value);
         }
     }
 
@@ -197,5 +219,13 @@ public final class YouTubePlaylistResolver {
             .strip();
         if (cleaned.length() > 80) cleaned = cleaned.substring(0, 80).strip();
         return cleaned.isBlank() ? "YouTube Playlist" : cleaned;
+    }
+
+    private static String unescapeXml(String text) {
+        return text.replace("&amp;", "&")
+            .replace("&quot;", "\"")
+            .replace("&#39;", "'")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">");
     }
 }
