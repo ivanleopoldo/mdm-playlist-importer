@@ -182,7 +182,7 @@ public final class AudioBackendImpl implements AudioBackend {
 
         String tag = html.substring(tagStart, tagEnd + 1);
         var matcher = java.util.regex.Pattern
-            .compile("(?i)content\\s*=\\s*[\\"']([^\\"']*)[\\"']")
+            .compile("(?i)content\\s*=\\s*\"([^\"]*)\"")
             .matcher(tag);
 
         return matcher.find() ? matcher.group(1) : null;
