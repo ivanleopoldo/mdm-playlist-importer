@@ -1,0 +1,9 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": ["LLL", "P P", "LLL"],
+  "key": {
+    "L": { "item": "minecraft:leather" },
+    "P": { "item": "minecraft:paper" }
+  },
+  "result": { "id": "vinyl_music:album", "count": 1 }
+}
