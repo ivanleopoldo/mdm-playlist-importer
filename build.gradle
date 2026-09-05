@@ -34,8 +34,18 @@ neoForge {
     }
 }
 
+configurations {
+    ssvInspect
+}
+
 dependencies {
     implementation 'maven.modrinth:mqnazM0E:2.2.4+neoforge-1.21.1'
+    ssvInspect 'maven.modrinth:xVfyaI9r:wxnjxdj2'
+}
+
+tasks.register('copySsvInspect', Copy) {
+    from configurations.ssvInspect
+    into layout.buildDirectory.dir('ssvInspect')
 }
 
 var generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
