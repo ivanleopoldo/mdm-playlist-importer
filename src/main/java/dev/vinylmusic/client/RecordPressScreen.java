@@ -11,7 +11,7 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
-import net.neoforged.neoforge.client.network.ClientPacketDistributor;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 public final class RecordPressScreen extends AbstractContainerScreen<RecordPressMenu> {
     private static final ResourceLocation TEX =
@@ -34,12 +34,12 @@ public final class RecordPressScreen extends AbstractContainerScreen<RecordPress
 
         addRenderableWidget(Button.builder(Component.translatable("vinyl_music.gui.create"), b -> {
             String url = urlField.getValue().trim();
-            if (!url.isBlank()) ClientPacketDistributor.sendToServer(new CreateVinylPayload(url));
+            if (!url.isBlank()) PacketDistributor.sendToServer(new CreateVinylPayload(url));
         }).bounds(leftPos + 14, topPos + 64, 108, 20).build());
 
         addRenderableWidget(Button.builder(Component.translatable("vinyl_music.gui.import_playlist"), b -> {
             String url = urlField.getValue().trim();
-            if (!url.isBlank()) ClientPacketDistributor.sendToServer(new ImportPlaylistPayload(url));
+            if (!url.isBlank()) PacketDistributor.sendToServer(new ImportPlaylistPayload(url));
         }).bounds(leftPos + 134, topPos + 64, 108, 20).build());
 
         addRenderableWidget(Button.builder(Component.translatable("vinyl_music.gui.clear"), b -> urlField.setValue(""))
