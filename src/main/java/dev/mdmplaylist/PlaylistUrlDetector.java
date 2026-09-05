@@ -43,16 +43,13 @@ public final class PlaylistUrlDetector {
         host = host.toLowerCase(Locale.ROOT);
 
         if (isYouTubeHost(host)) {
-            String path = uri.getPath() == null ? "" : uri.getPath();
-
-            // Treat only an actual playlist page as an automatic playlist import.
-            // watch?v=...&list=... remains a normal single song so MDM doesn't unexpectedly
-            // import a whole playlist when a user copied one video from a playlist.
-            if (!"/playlist".equals(path)) return Optional.empty();
-
-            Matcher matcher = YOUTUBE_LIST.matcher(uri.getRawQuery() == null ? "" : uri.getRawQuery());
+            Matcher matcher = YOUTUBE_LIST.matcher(
+                uri.getRawQuery() == null ? "" : uri.getRawQuery()
+            );
             if (matcher.find()) {
-                return Optional.of(new Match(Kind.YOUTUBE_PLAYLIST, matcher.group(1), trimmed));
+                return Optional.of(
+                    new Match(Kind.YOUTUBE_PLAYLIST, matcher.group(1), trimmed)
+                );
             }
             return Optional.empty();
         }
@@ -70,17 +67,29 @@ public final class PlaylistUrlDetector {
         if (host.equals("soundcloud.com") || host.endsWith(".soundcloud.com")) {
             String path = uri.getPath() == null ? "" : uri.getPath();
             if (path.contains("/sets/")) {
-                return Optional.of(new Match(Kind.SOUNDCLOUD_PLAYLIST, path, trimmed));
+                return Optional.of(
+                    new Match(Kind.SOUNDCLOUD_PLAYLIST, path, trimmed)
+                );
             }
         }
 
         return Optional.empty();
     }
 
+    public static String displayName(String url) {
+        return detect(url).map(match -> switch (match.kind()) {
+            case YOUTUBE_PLAYLIST -> "YouTube playlist / mix";
+            case SPOTIFY_PLAYLIST -> "Spotify playlist";
+            case SPOTIFY_ALBUM -> "Spotify album";
+            case SOUNDCLOUD_PLAYLIST -> "SoundCloud playlist";
+        }).orElse("No playlist detected");
+    }
+
     private static boolean isYouTubeHost(String host) {
         return "youtube.com".equals(host)
             || "www.youtube.com".equals(host)
             || "m.youtube.com".equals(host)
-            || "music.youtube.com".equals(host);
+            || "music.youtube.com".equals(host)
+            || "youtu.be".equals(host);
     }
 }
