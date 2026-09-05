@@ -11,12 +11,14 @@ import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.CreativeModeTabs;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
+import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 @Mod(VinylMusic.MOD_ID)
@@ -27,10 +29,24 @@ public final class VinylMusic {
         container.registerConfig(ModConfig.Type.COMMON, VinylMusicConfig.SPEC);
         ModContent.register(modBus);
         modBus.addListener(ModNetwork::register);
+        modBus.addListener(this::addCreativeTabContents);
         NeoForge.EVENT_BUS.addListener(this::onRightClickBlock);
 
         // Deliberately do not start the streaming backend here.
         // The isolated audio stack is loaded only when a track is resolved or played.
+    }
+
+    private void addCreativeTabContents(BuildCreativeModeTabContentsEvent event) {
+        if (event.getTabKey() == CreativeModeTabs.INGREDIENTS) {
+            // Blank Vinyl is the only raw/manual vinyl item.
+            // Custom Vinyls are outputs created by the Record Press.
+            event.accept(ModContent.BLANK_VINYL.get());
+        }
+
+        if (event.getTabKey() == CreativeModeTabs.FUNCTIONAL_BLOCKS) {
+            event.accept(ModContent.RECORD_PRESS_ITEM.get());
+            event.accept(ModContent.RECORD_PLAYER_ITEM.get());
+        }
     }
 
     private void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
