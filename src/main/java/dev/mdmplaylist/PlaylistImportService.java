@@ -26,10 +26,19 @@ public final class PlaylistImportService {
     private PlaylistImportService() {}
 
     public static boolean start(ServerPlayer player, String url) {
-        if (ACTIVE_IMPORTS.get() >= MAX_CONCURRENT_IMPORTS) {
-            player.sendSystemMessage(Component.literal("Two playlist imports are already running. Try again shortly."));
+        if (!PlaylistUrlDetector.isSupportedPlaylist(url)) {
+            player.sendSystemMessage(Component.literal(
+                "That URL is not a supported playlist. Use a YouTube playlist, Spotify playlist/album, or SoundCloud set."
+            ));
             return false;
         }
+        if (ACTIVE_IMPORTS.get() >= MAX_CONCURRENT_IMPORTS) {
+            player.sendSystemMessage(Component.literal(
+                "Two playlist imports are already running. Try again shortly."
+            ));
+            return false;
+        }
+
         MinecraftServer server = player.getServer();
         if (server == null) return false;
 
@@ -47,33 +56,50 @@ public final class PlaylistImportService {
 
     private static void importPlaylist(MinecraftServer server, UUID playerId, String url) {
         try {
-            YouTubePlaylistResolver.Playlist playlist = YouTubePlaylistResolver.resolve(url);
-            send(server, playerId, "Found \"" + playlist.title() + "\" with " + playlist.videoIds().size() + " track(s). Resolving...");
+            PlaylistResolver.Playlist playlist = PlaylistResolver.resolve(url);
+            send(
+                server,
+                playerId,
+                "Found \"" + playlist.title() + "\" with "
+                    + playlist.trackUrls().size() + " track(s). Resolving..."
+            );
 
             List<ItemStack> discs = new ArrayList<>();
             int failures = 0;
             int index = 0;
 
-            for (String videoId : playlist.videoIds()) {
+            for (String trackUrl : playlist.trackUrls()) {
                 index++;
                 try {
-                    discs.add(MusicDiscFactory.resolveVideo(videoId).stack());
-                    if (index == 1 || index % 5 == 0 || index == playlist.videoIds().size()) {
-                        send(server, playerId, "Resolved " + index + "/" + playlist.videoIds().size() + " tracks...");
+                    discs.add(MusicDiscFactory.resolveUrl(trackUrl).stack());
+                    if (index == 1 || index % 5 == 0 || index == playlist.trackUrls().size()) {
+                        send(
+                            server,
+                            playerId,
+                            "Resolved " + index + "/" + playlist.trackUrls().size() + " tracks..."
+                        );
                     }
                 } catch (Throwable t) {
                     failures++;
-                    PlaylistImporterMod.LOGGER.warn("Failed to resolve playlist video {}", videoId, t);
+                    PlaylistImporterMod.LOGGER.warn(
+                        "Failed to resolve playlist track {}", trackUrl, t
+                    );
                 }
             }
 
             if (discs.isEmpty()) {
-                send(server, playerId, "Import failed: no playlist tracks could be resolved.");
+                send(
+                    server,
+                    playerId,
+                    "Import failed: the playlist was found, but none of its tracks could be resolved."
+                );
                 return;
             }
 
             final int failedTracks = failures;
-            server.execute(() -> deliver(server, playerId, playlist.title(), discs, failedTracks));
+            server.execute(
+                () -> deliver(server, playerId, playlist.title(), discs, failedTracks)
+            );
         } catch (IllegalArgumentException e) {
             send(server, playerId, "Import failed: " + e.getMessage());
         } catch (Throwable t) {
@@ -94,7 +120,8 @@ public final class PlaylistImportService {
 
         int blankNeeded = discs.size();
         boolean useAlbums = AdditionalAdditionsCompat.installed();
-        int albumNeeded = useAlbums ? (discs.size() + TRACKS_PER_ALBUM - 1) / TRACKS_PER_ALBUM : 0;
+        int albumNeeded =
+            useAlbums ? (discs.size() + TRACKS_PER_ALBUM - 1) / TRACKS_PER_ALBUM : 0;
 
         int blanksAvailable = InventoryUtil.countBlankDiscs(player);
         int albumsAvailable = useAlbums ? InventoryUtil.countEmptyAlbums(player) : 0;
@@ -108,7 +135,9 @@ public final class PlaylistImportService {
         }
 
         if (!InventoryUtil.consumeBlankDiscs(player, blankNeeded)) {
-            player.sendSystemMessage(Component.literal("Inventory changed before delivery; nothing was created."));
+            player.sendSystemMessage(
+                Component.literal("Inventory changed before delivery; nothing was created.")
+            );
             return;
         }
 
@@ -125,7 +154,9 @@ public final class PlaylistImportService {
         if (albums.size() != albumNeeded) {
             refundBlankDiscs(player, blankNeeded);
             for (ItemStack album : albums) InventoryUtil.giveOrDrop(player, album);
-            player.sendSystemMessage(Component.literal("Inventory changed before album delivery. Materials were refunded."));
+            player.sendSystemMessage(Component.literal(
+                "Inventory changed before album delivery. Materials were refunded."
+            ));
             return;
         }
 
