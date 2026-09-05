@@ -23,6 +23,13 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
+      - name: Inspect SSV API
+        run: |
+          gradle copySsvInspect
+          SSV_JAR=$(find build/ssvInspect -name '*.jar' | head -n 1)
+          echo "SSV_JAR=$SSV_JAR"
+          jar tf "$SSV_JAR" | grep -Ei 'sound|disc|playlist|storage|jukebox|etched|compat|relay' | head -n 400
+
       - name: Build
         run: gradle build --stacktrace
 
