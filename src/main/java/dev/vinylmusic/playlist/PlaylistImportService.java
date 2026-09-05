@@ -82,8 +82,8 @@ public final class PlaylistImportService {
                     return;
                 }
 
-                int albumsNeeded = (resolved.size() + VinylData.DEFAULT_ALBUM_CAPACITY - 1)
-                    / VinylData.DEFAULT_ALBUM_CAPACITY;
+                int albumsNeeded = (resolved.size() + VinylData.albumCapacity() - 1)
+                    / VinylData.albumCapacity();
                 int failures = failed;
 
                 server.execute(() -> {
@@ -104,8 +104,8 @@ public final class PlaylistImportService {
                     }
 
                     for (int part = 0; part < albumsNeeded; part++) {
-                        int from = part * VinylData.DEFAULT_ALBUM_CAPACITY;
-                        int to = Math.min(from + VinylData.DEFAULT_ALBUM_CAPACITY, resolved.size());
+                        int from = part * VinylData.albumCapacity();
+                        int to = Math.min(from + VinylData.albumCapacity(), resolved.size());
                         String name = albumsNeeded == 1
                             ? playlist.title()
                             : playlist.title() + " (" + (part + 1) + "/" + albumsNeeded + ")";
