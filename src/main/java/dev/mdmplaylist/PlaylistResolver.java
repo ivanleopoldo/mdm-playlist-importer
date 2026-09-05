@@ -11,13 +11,14 @@ public final class PlaylistResolver {
     public static Playlist resolve(String url) throws IOException, InterruptedException {
         PlaylistUrlDetector.Match match = PlaylistUrlDetector.detect(url)
             .orElseThrow(() -> new IllegalArgumentException(
-                "Supported playlist URLs: YouTube playlists, Spotify playlists, and Spotify albums."
+                "Supported playlist URLs: YouTube playlists, Spotify playlists/albums, and SoundCloud sets."
             ));
 
         return switch (match.kind()) {
             case YOUTUBE_PLAYLIST -> YouTubePlaylistResolver.resolve(match.id());
             case SPOTIFY_PLAYLIST -> SpotifyPlaylistResolver.resolvePlaylist(match.id());
             case SPOTIFY_ALBUM -> SpotifyPlaylistResolver.resolveAlbum(match.id());
+            case SOUNDCLOUD_PLAYLIST -> SoundCloudPlaylistResolver.resolve(match.originalUrl());
         };
     }
 }
