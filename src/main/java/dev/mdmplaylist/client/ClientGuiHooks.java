@@ -58,7 +58,7 @@ public final class ClientGuiHooks {
     }
 
     @SubscribeEvent
-    public static void onScreenBackground(ScreenEvent.Render.Background event) {
+    public static void onScreenBackground(ScreenEvent.Render.Pre event) {
         if (!(event.getScreen() instanceof MusicDiscMakerScreen screen)) return;
         Controls controls = CONTROLS.get(screen);
         if (controls == null) return;
