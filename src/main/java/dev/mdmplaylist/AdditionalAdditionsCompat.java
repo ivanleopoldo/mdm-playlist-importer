@@ -1,9 +1,15 @@
 package dev.mdmplaylist;
 
+import com.kuronami.musicdiscmaker.component.CustomTrackData;
+import com.kuronami.musicdiscmaker.component.SilentSongs;
+import com.kuronami.musicdiscmaker.register.ModDataComponents;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.EitherHolder;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.JukeboxPlayable;
 import net.neoforged.fml.ModList;
 
 import java.lang.reflect.Constructor;
@@ -51,10 +57,68 @@ public final class AdditionalAdditionsCompat {
             Constructor<?> ctor = cls.getConstructor(List.class);
             Object contents = ctor.newInstance(List.copyOf(discs));
             setRawComponent(album, type, contents);
+            applySsvPlayableBridge(album, discs);
             return true;
         } catch (ReflectiveOperationException | RuntimeException e) {
             PlaylistImporterMod.LOGGER.error("Could not create Additional Additions album contents", e);
             return false;
+        }
+    }
+
+    /**
+     * Somewhat Sophisticated Vinyl Decor treats anything with JUKEBOX_PLAYABLE
+     * as a disc. Additional Additions albums normally keep that component only
+     * on the discs inside the album, so SSV cannot see the album itself.
+     *
+     * For albums created by this addon, attach a silent jukebox marker whose
+     * duration matches the whole MDM playlist chunk. Additional Additions still
+     * owns the real album playback; this marker only makes SSV recognize the
+     * album and gives autoplay a sensible total duration.
+     */
+    private static void applySsvPlayableBridge(ItemStack album, List<ItemStack> discs) {
+        if (discs.isEmpty()) return;
+
+        long totalDurationMs = 0L;
+        boolean radio = false;
+        boolean foundMdmTrack = false;
+
+        for (ItemStack disc : discs) {
+            CustomTrackData track = disc.get(ModDataComponents.CUSTOM_TRACK.get());
+            if (track == null || track.isEmpty()) continue;
+
+            foundMdmTrack = true;
+            if (track.radio() || track.durationMs() <= 0L) {
+                radio = true;
+                break;
+            }
+
+            long duration = track.durationMs();
+            if (Long.MAX_VALUE - totalDurationMs < duration) {
+                radio = true;
+                break;
+            }
+            totalDurationMs += duration;
+        }
+
+        if (foundMdmTrack) {
+            album.set(
+                DataComponents.JUKEBOX_PLAYABLE,
+                new JukeboxPlayable(
+                    new EitherHolder<>(SilentSongs.pick(totalDurationMs, radio)),
+                    false
+                )
+            );
+            return;
+        }
+
+        // Generic fallback for non-MDM discs: copying the first playable marker
+        // is enough for SSV to recognize the album as a disc-like item.
+        for (ItemStack disc : discs) {
+            JukeboxPlayable playable = disc.get(DataComponents.JUKEBOX_PLAYABLE);
+            if (playable != null) {
+                album.set(DataComponents.JUKEBOX_PLAYABLE, playable);
+                return;
+            }
         }
     }
 
