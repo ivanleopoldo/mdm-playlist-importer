@@ -11,7 +11,7 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
-import net.neoforged.neoforge.network.ClientPacketDistributor;
+import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 
 public final class RecordPressScreen extends AbstractContainerScreen<RecordPressMenu> {
     private static final ResourceLocation TEX =
