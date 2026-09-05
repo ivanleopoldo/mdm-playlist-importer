@@ -8,7 +8,7 @@ import java.util.regex.Pattern;
 
 public final class PlaylistUrlDetector {
     private static final Pattern YOUTUBE_LIST =
-        Pattern.compile("(?:^|[?&])list=([A-Za-z0-9_-]{10,100})(?:&|$)");
+        Pattern.compile("(?:^|&)list=([A-Za-z0-9_-]{10,100})(?:&|$)");
     private static final Pattern SPOTIFY =
         Pattern.compile("^/(?:intl-[a-z]{2}(?:-[A-Z]{2})?/)?(playlist|album)/([A-Za-z0-9]+)(?:/.*)?$");
 
@@ -17,10 +17,11 @@ public final class PlaylistUrlDetector {
     public enum Kind {
         YOUTUBE_PLAYLIST,
         SPOTIFY_PLAYLIST,
-        SPOTIFY_ALBUM
+        SPOTIFY_ALBUM,
+        SOUNDCLOUD_PLAYLIST
     }
 
-    public record Match(Kind kind, String id) {}
+    public record Match(Kind kind, String id, String originalUrl) {}
 
     public static boolean isSupportedPlaylist(String url) {
         return detect(url).isPresent();
@@ -28,10 +29,11 @@ public final class PlaylistUrlDetector {
 
     public static Optional<Match> detect(String rawUrl) {
         if (rawUrl == null || rawUrl.isBlank()) return Optional.empty();
+        String trimmed = rawUrl.trim();
 
         final URI uri;
         try {
-            uri = URI.create(rawUrl.trim());
+            uri = URI.create(trimmed);
         } catch (IllegalArgumentException e) {
             return Optional.empty();
         }
@@ -42,13 +44,15 @@ public final class PlaylistUrlDetector {
 
         if (isYouTubeHost(host)) {
             String path = uri.getPath() == null ? "" : uri.getPath();
-            // Auto-import only explicit playlist pages. A watch URL copied while browsing
-            // a playlist may also contain list=, but should remain a normal single-track URL.
+
+            // Treat only an actual playlist page as an automatic playlist import.
+            // watch?v=...&list=... remains a normal single song so MDM doesn't unexpectedly
+            // import a whole playlist when a user copied one video from a playlist.
             if (!"/playlist".equals(path)) return Optional.empty();
 
             Matcher matcher = YOUTUBE_LIST.matcher(uri.getRawQuery() == null ? "" : uri.getRawQuery());
             if (matcher.find()) {
-                return Optional.of(new Match(Kind.YOUTUBE_PLAYLIST, matcher.group(1)));
+                return Optional.of(new Match(Kind.YOUTUBE_PLAYLIST, matcher.group(1), trimmed));
             }
             return Optional.empty();
         }
@@ -59,7 +63,14 @@ public final class PlaylistUrlDetector {
                 Kind kind = "album".equals(matcher.group(1))
                     ? Kind.SPOTIFY_ALBUM
                     : Kind.SPOTIFY_PLAYLIST;
-                return Optional.of(new Match(kind, matcher.group(2)));
+                return Optional.of(new Match(kind, matcher.group(2), trimmed));
+            }
+        }
+
+        if (host.equals("soundcloud.com") || host.endsWith(".soundcloud.com")) {
+            String path = uri.getPath() == null ? "" : uri.getPath();
+            if (path.contains("/sets/")) {
+                return Optional.of(new Match(Kind.SOUNDCLOUD_PLAYLIST, path, trimmed));
             }
         }
 
