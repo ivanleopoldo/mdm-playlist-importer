@@ -1,6 +1,7 @@
 package dev.vinylmusic.item;
 
 import dev.vinylmusic.content.ModContent;
+import dev.vinylmusic.config.VinylMusicConfig;
 import dev.vinylmusic.model.VinylTrack;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
@@ -12,9 +13,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class VinylData {
-    public static final int DEFAULT_ALBUM_CAPACITY = 24;
 
     private VinylData() {}
+
+    public static int albumCapacity() {
+        return VinylMusicConfig.albumCapacity();
+    }
 
     public static ItemStack createVinyl(VinylTrack track) {
         ItemStack stack = new ItemStack(ModContent.CUSTOM_VINYL.get());
