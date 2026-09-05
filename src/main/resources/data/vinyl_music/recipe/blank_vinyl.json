@@ -1,0 +1,9 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [" C ", "CIC", " C "],
+  "key": {
+    "C": { "item": "minecraft:coal" },
+    "I": { "item": "minecraft:iron_nugget" }
+  },
+  "result": { "id": "vinyl_music:blank_vinyl", "count": 1 }
+}

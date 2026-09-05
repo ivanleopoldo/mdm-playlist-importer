@@ -1,0 +1,11 @@
+{
+  "stream": {
+    "sounds": [
+      {
+        "name": "minecraft:records/13",
+        "stream": true,
+        "attenuation_distance": 64
+      }
+    ]
+  }
+}

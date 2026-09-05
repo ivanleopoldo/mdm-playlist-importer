@@ -1,0 +1,12 @@
+{
+  "item.vinyl_music.blank_vinyl": "Blank Vinyl",
+  "item.vinyl_music.custom_vinyl": "Custom Vinyl",
+  "item.vinyl_music.album": "Record Album",
+  "block.vinyl_music.record_press": "Record Press",
+  "block.vinyl_music.record_player": "Record Player",
+  "container.vinyl_music.record_press": "Record Press",
+  "vinyl_music.gui.url": "Paste a track or playlist URL",
+  "vinyl_music.gui.create": "Create Record",
+  "vinyl_music.gui.import_playlist": "Import Playlist",
+  "vinyl_music.gui.clear": "Clear"
+}

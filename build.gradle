@@ -13,7 +13,13 @@ base {
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
 repositories {
-    maven { url = 'https://api.modrinth.com/maven' }
+    maven { url = 'https://repo.u-team.info' }
+    maven { url = 'https://maven.arbjerg.dev/releases' }
+    maven {
+        url = 'https://maven.lavalink.dev/snapshots'
+        mavenContent { snapshotsOnly() }
+    }
+    mavenCentral()
 }
 
 neoForge {
@@ -35,7 +41,24 @@ neoForge {
 }
 
 dependencies {
-    implementation 'maven.modrinth:mqnazM0E:2.2.4+neoforge-1.21.1'
+    def lava = implementation('net.hycrafthd.lavaplayer:lavaplayer:2.2.4-fix-j8')
+    jarJar(lava) {
+        version {
+            strictly '[2.2.4-fix-j8]'
+            prefer '2.2.4-fix-j8'
+        }
+    }
+
+    def yt = implementation('dev.lavalink.youtube:v2:c46ab888ee12bc4bcb37c8ebcaf180e85ae30368-SNAPSHOT')
+    jarJar(yt) {
+        version {
+            strictly '[c46ab888ee12bc4bcb37c8ebcaf180e85ae30368-SNAPSHOT]'
+            prefer 'c46ab888ee12bc4bcb37c8ebcaf180e85ae30368-SNAPSHOT'
+        }
+    }
+
+    additionalRuntimeClasspath 'net.hycrafthd.lavaplayer:lavaplayer:2.2.4-fix-j8'
+    additionalRuntimeClasspath 'dev.lavalink.youtube:v2:c46ab888ee12bc4bcb37c8ebcaf180e85ae30368-SNAPSHOT'
 }
 
 var generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {

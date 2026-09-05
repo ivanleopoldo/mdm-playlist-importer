@@ -23,16 +23,5 @@ versionRange="${minecraft_version_range}"
 ordering="NONE"
 side="BOTH"
 
-[[dependencies."${mod_id}"]]
-modId="music_disc_maker"
-type="required"
-versionRange="[2.2.1,)"
-ordering="AFTER"
-side="BOTH"
-
-[[dependencies."${mod_id}"]]
-modId="additionaladditions"
-type="optional"
-versionRange="[10.0.0,)"
-ordering="AFTER"
-side="BOTH"
+[[mixins]]
+config="vinyl_music.mixins.json"
