@@ -1,9 +1,9 @@
 package dev.mdmplaylist;
 
 import com.kuronami.musicdiscmaker.audio.LoaderHolder;
-import com.kuronami.musicdiscmaker.lavaplayer.api.TrackInfo;
 import com.kuronami.musicdiscmaker.component.CustomTrackData;
 import com.kuronami.musicdiscmaker.component.SilentSongs;
+import com.kuronami.musicdiscmaker.lavaplayer.api.TrackInfo;
 import com.kuronami.musicdiscmaker.register.ModDataComponents;
 import com.kuronami.musicdiscmaker.register.ModItems;
 import net.minecraft.core.component.DataComponents;
@@ -18,19 +18,27 @@ public final class MusicDiscFactory {
 
     public record ResolvedDisc(String title, ItemStack stack) {}
 
-    public static ResolvedDisc resolveVideo(String videoId) {
-        String originalUrl = "https://www.youtube.com/watch?v=" + videoId;
-        TrackInfo track = LoaderHolder.get().resolve(originalUrl);
-        if (track == null) throw new IllegalStateException("Music Disc Maker returned no track information.");
+    public static ResolvedDisc resolveUrl(String sourceUrl) {
+        TrackInfo track = LoaderHolder.get().resolve(sourceUrl);
+        if (track == null) {
+            throw new IllegalStateException("Music Disc Maker returned no track information.");
+        }
 
-        boolean radio = track.stream() || track.durationMs() <= 0L || track.durationMs() > RADIO_DURATION_THRESHOLD_MS;
+        boolean radio = track.stream()
+            || track.durationMs() <= 0L
+            || track.durationMs() > RADIO_DURATION_THRESHOLD_MS;
         long storedDuration = radio ? 0L : track.durationMs();
-        String storedUrl = track.uri() == null || track.uri().isBlank() ? originalUrl : track.uri();
-        String title = track.title() == null || track.title().isBlank() ? "Unknown Track" : track.title();
+        String storedUrl = track.uri() == null || track.uri().isBlank()
+            ? sourceUrl
+            : track.uri();
+        String title = track.title() == null || track.title().isBlank()
+            ? "Unknown Track"
+            : track.title();
         String author = track.author() == null ? "" : track.author();
         String thumbnail = track.thumbnailUrl() == null ? "" : track.thumbnailUrl();
 
-        CustomTrackData data = new CustomTrackData(storedUrl, title, author, storedDuration, thumbnail, radio);
+        CustomTrackData data =
+            new CustomTrackData(storedUrl, title, author, storedDuration, thumbnail, radio);
 
         ItemStack disc = new ItemStack(ModItems.CUSTOM_MUSIC_DISC.get());
         disc.set(ModDataComponents.CUSTOM_TRACK.get(), data);
