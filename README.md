@@ -2,13 +2,13 @@
 
 NeoForge 1.21.1 addon for Music Disc Maker.
 
-## v0.4.0
+## v0.4.1
 
-The playlist controls are now visually part of the **Music Disc Maker GUI**.
+Fixes the startup crash introduced in v0.4.0.
 
-The Music Disc Maker window is widened with a connected, backed GUI panel containing an **Import Playlist** button. It is no longer a floating button outside the interface.
+The addon no longer transforms Music Disc Maker's screen with a Mixin. Instead it uses NeoForge client screen events to draw a connected, backed side panel and add the **Import Playlist** button. This keeps Music Disc Maker's own GUI class untouched.
 
-### Supported playlist links
+Supported links:
 
 - YouTube `/playlist?list=...`
 - YouTube watch / YouTube Music links containing `list=...`
@@ -17,6 +17,6 @@ The Music Disc Maker window is widened with a connected, backed GUI panel contai
 - Spotify albums
 - SoundCloud sets/playlists
 
-Normal Music Disc Maker behavior is unchanged. Pasting a YouTube watch URL with a playlist still allows Music Disc Maker to treat it as one song unless the player explicitly presses **Import Playlist**.
+Normal Music Disc Maker single-track behavior remains unchanged. Press **Import Playlist** only when you want the full playlist/mix.
 
-When Additional Additions is installed, imported tracks are packed into empty Albums, 8 tracks per Album. Imports are capped at 64 tracks.
+With Additional Additions installed, imported tracks are packed into empty Albums, 8 tracks per Album. Imports are capped at 64 tracks.
