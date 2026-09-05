@@ -1,0 +1,11 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": ["PPP", "DND", "WWW"],
+  "key": {
+    "P": { "item": "minecraft:oak_planks" },
+    "D": { "item": "minecraft:diamond" },
+    "N": { "item": "minecraft:note_block" },
+    "W": { "item": "minecraft:oak_slab" }
+  },
+  "result": { "id": "vinyl_music:record_player", "count": 1 }
+}
