@@ -1,10 +1,13 @@
 package dev.mdmplaylist;
 
-import net.minecraft.core.component.DataComponents;
+import com.kuronami.musicdiscmaker.block.MusicDiscMakerBlockEntity;
+import com.kuronami.musicdiscmaker.register.ModItems;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.entity.BlockEntity;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,7 +17,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public final class PlaylistImportService {
-    private static final int TRACKS_PER_ALBUM = 8;
     private static final int MAX_CONCURRENT_IMPORTS = 2;
     private static final AtomicInteger ACTIVE_IMPORTS = new AtomicInteger();
     private static final ExecutorService WORKERS = Executors.newFixedThreadPool(2, runnable -> {
@@ -25,7 +27,7 @@ public final class PlaylistImportService {
 
     private PlaylistImportService() {}
 
-    public static boolean start(ServerPlayer player, String url) {
+    public static boolean start(ServerPlayer player, BlockPos makerPos, String url) {
         if (!PlaylistUrlDetector.isSupportedPlaylist(url)) {
             player.sendSystemMessage(Component.literal(
                 "That URL is not a supported playlist. Use a YouTube playlist, Spotify playlist/album, or SoundCloud set."
@@ -39,14 +41,43 @@ public final class PlaylistImportService {
             return false;
         }
 
+        MusicDiscMakerBlockEntity maker = findMaker(player, makerPos);
+        if (maker == null) {
+            player.sendSystemMessage(Component.literal(
+                "Music Disc Maker not found. Reopen the machine and try again."
+            ));
+            return false;
+        }
+
+        if (maker.isResolving()) {
+            player.sendSystemMessage(Component.literal(
+                "Music Disc Maker is already resolving a single track. Wait for it to finish, then import the playlist."
+            ));
+            return false;
+        }
+
+        ItemStack input = maker.getItem(MusicDiscMakerBlockEntity.SLOT_INPUT);
+        if (!input.is(ModItems.BLANK_DISC.get()) || input.isEmpty()) {
+            player.sendSystemMessage(Component.literal(
+                "Put Blank Discs in the Music Disc Maker input slot first."
+            ));
+            return false;
+        }
+
+        // Playlist import owns this URL. Clear MDM's normal single-track URL so
+        // it does not also fabricate one track while the playlist is resolving.
+        maker.setCurrentUrl("");
+
         MinecraftServer server = player.getServer();
         if (server == null) return false;
 
         UUID playerId = player.getUUID();
+        BlockPos pos = makerPos.immutable();
+
         ACTIVE_IMPORTS.incrementAndGet();
         WORKERS.execute(() -> {
             try {
-                importPlaylist(server, playerId, url);
+                importPlaylist(server, playerId, pos, url);
             } finally {
                 ACTIVE_IMPORTS.decrementAndGet();
             }
@@ -54,13 +85,18 @@ public final class PlaylistImportService {
         return true;
     }
 
-    private static void importPlaylist(MinecraftServer server, UUID playerId, String url) {
+    private static void importPlaylist(
+        MinecraftServer server,
+        UUID playerId,
+        BlockPos makerPos,
+        String url
+    ) {
         try {
             PlaylistResolver.Playlist playlist = PlaylistResolver.resolve(url);
             send(
                 server,
                 playerId,
-                "Found \"" + playlist.title() + "\" with "
+                "Found "" + playlist.title() + "" with "
                     + playlist.trackUrls().size() + " track(s). Resolving..."
             );
 
@@ -98,7 +134,7 @@ public final class PlaylistImportService {
 
             final int failedTracks = failures;
             server.execute(
-                () -> deliver(server, playerId, playlist.title(), discs, failedTracks)
+                () -> deliver(server, playerId, makerPos, discs, failedTracks)
             );
         } catch (IllegalArgumentException e) {
             send(server, playerId, "Import failed: " + e.getMessage());
@@ -111,91 +147,74 @@ public final class PlaylistImportService {
     private static void deliver(
         MinecraftServer server,
         UUID playerId,
-        String playlistTitle,
+        BlockPos makerPos,
         List<ItemStack> discs,
         int failedTracks
     ) {
         ServerPlayer player = server.getPlayerList().getPlayer(playerId);
         if (player == null) return;
 
+        MusicDiscMakerBlockEntity maker = findMaker(player, makerPos);
+        if (maker == null) {
+            player.sendSystemMessage(Component.literal(
+                "Import finished, but the Music Disc Maker is no longer available. Nothing was consumed."
+            ));
+            return;
+        }
+
         int blankNeeded = discs.size();
-        boolean useAlbums = AdditionalAdditionsCompat.installed();
-        int albumNeeded =
-            useAlbums ? (discs.size() + TRACKS_PER_ALBUM - 1) / TRACKS_PER_ALBUM : 0;
+        ItemStack input = maker.getItem(MusicDiscMakerBlockEntity.SLOT_INPUT);
+        int blanksAvailable = input.is(ModItems.BLANK_DISC.get()) ? input.getCount() : 0;
 
-        int blanksAvailable = InventoryUtil.countBlankDiscs(player);
-        int albumsAvailable = useAlbums ? InventoryUtil.countEmptyAlbums(player) : 0;
-
-        if (blanksAvailable < blankNeeded || (useAlbums && albumsAvailable < albumNeeded)) {
-            String msg = "Need " + blankNeeded + " blank disc(s)"
-                + (useAlbums ? " and " + albumNeeded + " empty album(s)" : "")
-                + ". Nothing was consumed.";
-            player.sendSystemMessage(Component.literal(msg));
-            return;
-        }
-
-        if (!InventoryUtil.consumeBlankDiscs(player, blankNeeded)) {
-            player.sendSystemMessage(
-                Component.literal("Inventory changed before delivery; nothing was created.")
-            );
-            return;
-        }
-
-        if (!useAlbums) {
-            for (ItemStack disc : discs) InventoryUtil.giveOrDrop(player, disc.copy());
+        if (blanksAvailable < blankNeeded) {
             player.sendSystemMessage(Component.literal(
-                "Imported " + discs.size() + " loose disc(s)"
-                    + (failedTracks > 0 ? "; " + failedTracks + " track(s) failed." : ".")
+                "Need " + blankNeeded + " Blank Disc(s) in the Music Disc Maker input slot, but only "
+                    + blanksAvailable + " are available. Nothing was consumed."
             ));
             return;
         }
 
-        List<ItemStack> albums = InventoryUtil.takeEmptyAlbums(player, albumNeeded);
-        if (albums.size() != albumNeeded) {
-            refundBlankDiscs(player, blankNeeded);
-            for (ItemStack album : albums) InventoryUtil.giveOrDrop(player, album);
-            player.sendSystemMessage(Component.literal(
-                "Inventory changed before album delivery. Materials were refunded."
-            ));
-            return;
-        }
-
-        int packed = 0;
-        int loose = 0;
-        for (int part = 0; part < albums.size(); part++) {
-            int from = part * TRACKS_PER_ALBUM;
-            int to = Math.min(from + TRACKS_PER_ALBUM, discs.size());
-            List<ItemStack> tracks = discs.subList(from, to);
-            ItemStack album = albums.get(part);
-
-            if (!AdditionalAdditionsCompat.fillAlbum(album, tracks)) {
-                InventoryUtil.giveOrDrop(player, album);
-                for (ItemStack disc : tracks) InventoryUtil.giveOrDrop(player, disc.copy());
-                loose += tracks.size();
-                continue;
+        ItemStack consumed = maker.removeItem(MusicDiscMakerBlockEntity.SLOT_INPUT, blankNeeded);
+        if (consumed.getCount() != blankNeeded) {
+            if (!consumed.isEmpty()) {
+                ItemStack refund = consumed.copy();
+                ItemStack current = maker.getItem(MusicDiscMakerBlockEntity.SLOT_INPUT);
+                if (current.isEmpty()) {
+                    maker.setItem(MusicDiscMakerBlockEntity.SLOT_INPUT, refund);
+                } else if (ItemStack.isSameItemSameComponents(current, refund)) {
+                    current.grow(refund.getCount());
+                    maker.setItem(MusicDiscMakerBlockEntity.SLOT_INPUT, current);
+                } else {
+                    InventoryUtil.giveOrDrop(player, refund);
+                }
             }
-
-            String name = albums.size() == 1
-                ? playlistTitle
-                : playlistTitle + " (" + (part + 1) + "/" + albums.size() + ")";
-            album.set(DataComponents.CUSTOM_NAME, Component.literal(name));
-            InventoryUtil.giveOrDrop(player, album);
-            packed++;
+            player.sendSystemMessage(Component.literal(
+                "Music Disc Maker input changed during delivery. Nothing was created."
+            ));
+            return;
         }
 
-        String result = "Imported " + discs.size() + " track(s) into " + packed + " album(s)"
-            + (loose > 0 ? "; " + loose + " delivered loose" : "")
-            + (failedTracks > 0 ? "; " + failedTracks + " failed" : "") + ".";
-        player.sendSystemMessage(Component.literal(result));
+        for (ItemStack disc : discs) {
+            InventoryUtil.giveOrDrop(player, disc.copy());
+        }
+
+        player.sendSystemMessage(Component.literal(
+            "Imported " + discs.size() + " loose MDM disc(s)"
+                + (failedTracks > 0 ? "; " + failedTracks + " track(s) failed." : ".")
+        ));
     }
 
-    private static void refundBlankDiscs(ServerPlayer player, int count) {
-        for (int i = 0; i < count; i++) {
-            InventoryUtil.giveOrDrop(
-                player,
-                new ItemStack(com.kuronami.musicdiscmaker.register.ModItems.BLANK_DISC.get())
-            );
+    private static MusicDiscMakerBlockEntity findMaker(ServerPlayer player, BlockPos pos) {
+        if (player.distanceToSqr(
+            pos.getX() + 0.5,
+            pos.getY() + 0.5,
+            pos.getZ() + 0.5
+        ) > 64.0) {
+            return null;
         }
+
+        BlockEntity blockEntity = player.serverLevel().getBlockEntity(pos);
+        return blockEntity instanceof MusicDiscMakerBlockEntity maker ? maker : null;
     }
 
     private static void send(MinecraftServer server, UUID playerId, String message) {

@@ -1,6 +1,7 @@
 package dev.mdmplaylist.client;
 
 import com.kuronami.musicdiscmaker.client.MusicDiscMakerScreen;
+import com.kuronami.musicdiscmaker.menu.MusicDiscMakerMenu;
 import dev.mdmplaylist.AdditionalAdditionsCompat;
 import dev.mdmplaylist.PlaylistImporterMod;
 import dev.mdmplaylist.PlaylistUrlDetector;
@@ -46,9 +47,22 @@ public final class ClientGuiHooks {
             Component.literal("Import Playlist"),
             ignored -> {
                 String url = urlField.getValue().trim();
-                if (PlaylistUrlDetector.isSupportedPlaylist(url)) {
-                    PacketDistributor.sendToServer(new ImportPlaylistPayload(url));
+                Minecraft minecraft = Minecraft.getInstance();
+
+                if (!PlaylistUrlDetector.isSupportedPlaylist(url)
+                    || minecraft.player == null
+                    || !(minecraft.player.containerMenu instanceof MusicDiscMakerMenu menu)) {
+                    return;
                 }
+
+                PacketDistributor.sendToServer(
+                    new ImportPlaylistPayload(menu.getBlockEntity().getBlockPos(), url)
+                );
+
+                // Do not let MDM's normal single-track flow also process the
+                // playlist URL when this button takes focus away from the field.
+                urlField.setValue("");
+                urlField.setFocused(false);
             }
         ).bounds(x, y, 102, 20).build();
 
@@ -73,8 +87,6 @@ public final class ClientGuiHooks {
         int right = x + PANEL_WIDTH;
         int bottom = y + screen.getYSize();
 
-        // Attached vanilla-style panel. It touches the Music Disc Maker window
-        // directly, so the playlist controls read as part of the same GUI.
         g.fill(x, y, right, bottom, 0xFF373737);
         g.fill(x + 1, y + 1, right - 1, bottom - 1, 0xFFFFFFFF);
         g.fill(x + 2, y + 2, right - 2, bottom - 2, 0xFFC6C6C6);
@@ -100,23 +112,31 @@ public final class ClientGuiHooks {
 
         g.drawString(
             Minecraft.getInstance().font,
-            Component.literal(
-                AdditionalAdditionsCompat.installed()
-                    ? "Albums: ON (8 tracks)"
-                    : "Albums: OFF"
-            ),
+            Component.literal("Output: loose discs"),
             tx, y + 64, 0x666666, false
+        );
+
+        int albumCapacity = AdditionalAdditionsCompat.albumCapacity();
+        String albumText = !AdditionalAdditionsCompat.installed()
+            ? "AA Albums: OFF"
+            : albumCapacity > 0
+                ? "AA Album cap: " + albumCapacity
+                : "AA Album cap: ?";
+        g.drawString(
+            Minecraft.getInstance().font,
+            Component.literal(albumText),
+            tx, y + 76, 0x666666, false
         );
 
         g.drawString(
             Minecraft.getInstance().font,
             Component.literal("YouTube / Spotify"),
-            tx, y + 92, 0x666666, false
+            tx, y + 104, 0x666666, false
         );
         g.drawString(
             Minecraft.getInstance().font,
             Component.literal("SoundCloud"),
-            tx, y + 104, 0x666666, false
+            tx, y + 116, 0x666666, false
         );
     }
 
