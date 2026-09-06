@@ -96,7 +96,7 @@ public final class PlaylistImportService {
             send(
                 server,
                 playerId,
-                "Found "" + playlist.title() + "" with "
+                "Found \"" + playlist.title() + "\" with "
                     + playlist.trackUrls().size() + " track(s). Resolving..."
             );
 
